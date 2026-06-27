@@ -2,167 +2,118 @@
 
 import { useEffect, useRef, useState } from "react";
 import type Phaser from "phaser";
-import type { Allocation, AllocationBucket, Player } from "@/lib/types";
-import type { WorldSyncPayload } from "./phaser/WorldScene";
+import type { GameRoom } from "@/lib/types";
+import type { OpenWorldSync } from "./phaser/OpenWorldScene";
 
 interface Props {
-  allocation: Allocation;
-  onAllocationChange: (a: Allocation) => void;
-  players: Record<string, Player>;
+  room: GameRoom;
   currentPlayerId: string;
-  phase: string;
-  disabled?: boolean;
-  showAllAllocations?: boolean;
+  onMove: (x: number, y: number) => void;
+  onAttackMonster: (id: string) => void;
+  onCollectGift: (id: string) => void;
 }
 
 export function PhaserGameWorld({
-  allocation,
-  onAllocationChange,
-  players,
+  room,
   currentPlayerId,
-  phase,
-  disabled,
-  showAllAllocations,
+  onMove,
+  onAttackMonster,
+  onCollectGift,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const initRef = useRef(false);
-  const onAllocateRef = useRef<(zone: AllocationBucket, amount: number) => void>(
-    () => {}
-  );
-  const [status, setStatus] = useState<"loading" | "ready" | "error">(
-    "loading"
-  );
-  const [errorMsg, setErrorMsg] = useState("");
+  const callbacksRef = useRef({ onMove, onAttackMonster, onCollectGift });
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
-  onAllocateRef.current = (zone, amount) => {
-    const total = Object.values(allocation).reduce((a, b) => a + b, 0);
-    if (total + amount > 100) return;
-    onAllocationChange({
-      ...allocation,
-      [zone]: allocation[zone] + amount,
-    });
-  };
+  callbacksRef.current = { onMove, onAttackMonster, onCollectGift };
 
-  // Khởi tạo Phaser khi container đã có kích thước
   useEffect(() => {
     let mounted = true;
     let observer: ResizeObserver | null = null;
 
     async function boot() {
       if (!mounted || !containerRef.current || initRef.current) return;
-
-      const el = containerRef.current;
-      if (el.clientWidth < 80) return;
+      if (containerRef.current.clientWidth < 80) return;
 
       try {
         initRef.current = true;
-        const { createPhaserGame } = await import("./phaser/WorldScene");
+        const { createOpenWorldGame } = await import("./phaser/OpenWorldScene");
 
-        if (!mounted || !containerRef.current) return;
-
-        const payload: WorldSyncPayload = {
-          allocation,
-          players,
+        const sync: OpenWorldSync = {
+          room,
           currentPlayerId,
-          phase,
-          disabled,
-          showAll: showAllAllocations,
-          onAllocate: (z, a) => onAllocateRef.current(z, a),
+          onMove: (x, y) => callbacksRef.current.onMove(x, y),
+          onAttackMonster: (id) => callbacksRef.current.onAttackMonster(id),
+          onCollectGift: (id) => callbacksRef.current.onCollectGift(id),
         };
 
-        gameRef.current = createPhaserGame(containerRef.current, payload);
+        gameRef.current = createOpenWorldGame(containerRef.current, sync);
         setStatus("ready");
       } catch (e) {
         initRef.current = false;
         setStatus("error");
-        setErrorMsg(e instanceof Error ? e.message : "Không khởi tạo được game");
-        console.error("[PhaserGameWorld]", e);
+        console.error(e);
       }
     }
 
     boot();
-
     if (containerRef.current && !initRef.current) {
-      observer = new ResizeObserver(() => {
-        if (!initRef.current) boot();
-      });
+      observer = new ResizeObserver(() => boot());
       observer.observe(containerRef.current);
     }
 
     return () => {
       mounted = false;
       observer?.disconnect();
-      if (gameRef.current) {
-        gameRef.current.destroy(true);
-        gameRef.current = null;
-      }
+      gameRef.current?.destroy(true);
+      gameRef.current = null;
       initRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Đồng bộ state React → Phaser
   useEffect(() => {
     if (!gameRef.current || status !== "ready") return;
-
-    import("./phaser/WorldScene").then(({ syncPhaserWorld }) => {
-      syncPhaserWorld(gameRef.current, {
-        allocation,
-        players,
+    import("./phaser/OpenWorldScene").then(({ syncOpenWorld }) => {
+      syncOpenWorld(gameRef.current, {
+        room,
         currentPlayerId,
-        phase,
-        disabled,
-        showAll: showAllAllocations,
-        onAllocate: (z, a) => onAllocateRef.current(z, a),
+        onMove: (x, y) => callbacksRef.current.onMove(x, y),
+        onAttackMonster: (id) => callbacksRef.current.onAttackMonster(id),
+        onCollectGift: (id) => callbacksRef.current.onCollectGift(id),
       });
     });
-  }, [
-    allocation,
-    players,
-    currentPlayerId,
-    phase,
-    disabled,
-    showAllAllocations,
-    status,
-  ]);
+  }, [room, currentPlayerId, status]);
+
+  const playing = room.phase === "playing" || room.phase === "ending_soon";
 
   return (
-    <div className="relative w-full rounded-2xl border border-white/[0.08] overflow-hidden bg-[#1a1a2e] shadow-2xl shadow-blue-500/10">
-      <div
-        ref={containerRef}
-        className="w-full min-h-[320px] aspect-[960/640]"
-        style={{ touchAction: "none" }}
-      />
+    <div className="relative w-full rounded-2xl border border-white/[0.08] overflow-hidden bg-[#0f1419]">
+      <div ref={containerRef} className="w-full min-h-[320px] aspect-[960/640]" />
 
       {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/90">
-          <p className="text-zinc-400 text-sm animate-pulse">
-            Đang tải bản đồ & nhân vật...
-          </p>
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0f1419]/90">
+          <p className="text-zinc-400 text-sm animate-pulse">Đang tải thế giới...</p>
         </div>
       )}
 
       {status === "error" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1a1a2e]/95 gap-2 p-4">
-          <p className="text-red-400 text-sm">Lỗi tải game: {errorMsg}</p>
-          <button
-            type="button"
-            className="text-xs px-3 py-1 rounded border border-white/20 hover:bg-white/5"
-            onClick={() => window.location.reload()}
-          >
-            Tải lại trang
-          </button>
+        <div className="absolute inset-0 flex items-center justify-center text-red-400 text-sm">
+          Lỗi tải map — refresh trang
         </div>
       )}
 
-      {phase === "allocating" && !disabled && status === "ready" && (
-        <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2 pointer-events-none z-10">
+      {playing && status === "ready" && (
+        <div className="absolute bottom-3 left-3 flex flex-wrap gap-2 pointer-events-none z-10">
           <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-400 border border-white/10">
-            WASD / ↑↓←→ di chuyển
+            WASD di chuyển
           </span>
           <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-400 border border-white/10">
-            Click vùng để +10 vốn
+            E / Click $ để đánh quái
+          </span>
+          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-400 border border-white/10">
+            Chạm người chơi → PvP
           </span>
         </div>
       )}
