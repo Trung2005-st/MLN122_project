@@ -1,5 +1,6 @@
 export const GAME_WIDTH = 960;
 export const GAME_HEIGHT = 640;
+export const TILE_SIZE = 32;
 
 export const HUB_POS = { x: 480, y: 320 };
 

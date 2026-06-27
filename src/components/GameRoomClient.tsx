@@ -12,7 +12,7 @@ import { GameHUD } from "@/components/rpg/GameHUD";
 import { PhaseTimer } from "@/components/rpg/PhaseTimer";
 import { getStoredPlayerId } from "@/lib/player-session";
 import type { CombatQuestionView, GameRoom } from "@/lib/types";
-import { GAME_DURATION_MS } from "@/lib/types";
+import { GAME_DURATION_MS, GAME_PREP_MS } from "@/lib/types";
 
 const PhaserGameWorld = dynamic(
   () =>
@@ -93,6 +93,10 @@ export function GameRoomClient({ code }: Props) {
   );
 
   useEffect(() => {
+    import("@/components/rpg/phaser/OpenWorldScene");
+  }, []);
+
+  useEffect(() => {
     const pid = getStoredPlayerId();
     if (!pid) {
       router.replace("/");
@@ -140,8 +144,12 @@ export function GameRoomClient({ code }: Props) {
       ? room.players[me.challengedBy].name
       : null;
 
+  const isPrepping =
+    playing && room.gameStartedAt != null && serverTime < room.gameStartedAt;
+  const prepLeft = isPrepping ? room.gameStartedAt! - serverTime : 0;
+
   const timeLeft =
-    room.gameEndsAt && playing
+    room.gameEndsAt && playing && !isPrepping
       ? Math.max(0, room.gameEndsAt - serverTime)
       : GAME_DURATION_MS;
 
@@ -166,8 +174,9 @@ export function GameRoomClient({ code }: Props) {
             <div className="hidden md:block w-64">
               <PhaseTimer
                 phase={room.phase}
-                timeLeftMs={timeLeft}
-                totalMs={GAME_DURATION_MS}
+                timeLeftMs={isPrepping ? prepLeft : timeLeft}
+                totalMs={isPrepping ? GAME_PREP_MS : GAME_DURATION_MS}
+                preparing={isPrepping}
               />
             </div>
           )}
@@ -181,7 +190,17 @@ export function GameRoomClient({ code }: Props) {
           </p>
         )}
 
-        {room.phase === "ending_soon" && (
+        {isPrepping && (
+          <motion.p
+            animate={{ opacity: [1, 0.6, 1] }}
+            transition={{ repeat: Infinity, duration: 1.5 }}
+            className="mb-3 text-emerald-300 text-center text-sm font-medium"
+          >
+            ⏳ Chuẩn bị {Math.ceil(prepLeft / 1000)}s — tải map, timer chưa chạy
+          </motion.p>
+        )}
+
+        {room.phase === "ending_soon" && !isPrepping && (
           <motion.p
             animate={{ opacity: [1, 0.5, 1] }}
             transition={{ repeat: Infinity, duration: 1 }}
@@ -228,19 +247,20 @@ export function GameRoomClient({ code }: Props) {
               <div className="md:hidden">
                 <PhaseTimer
                   phase={room.phase}
-                  timeLeftMs={timeLeft}
-                  totalMs={GAME_DURATION_MS}
+                  timeLeftMs={isPrepping ? prepLeft : timeLeft}
+                  totalMs={isPrepping ? GAME_PREP_MS : GAME_DURATION_MS}
+                  preparing={isPrepping}
                 />
               </div>
               <PhaserGameWorld
                 room={room}
                 currentPlayerId={playerIdRef.current ?? ""}
                 onMove={(x, y) => sendAction({ type: "move", x, y })}
-                onAttackMonster={(id) =>
-                  sendAction({ type: "attack_monster", monsterId: id })
+                onAttackMonster={(id, x, y) =>
+                  sendAction({ type: "attack_monster", monsterId: id, x, y })
                 }
-                onCollectGift={(id) =>
-                  sendAction({ type: "collect_gift", giftId: id })
+                onCollectGift={(id, x, y) =>
+                  sendAction({ type: "collect_gift", giftId: id, x, y })
                 }
               />
               {/* Event feed */}

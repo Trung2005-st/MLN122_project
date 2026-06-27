@@ -5,27 +5,39 @@ import {
   GAME_WIDTH,
   HUB_POS,
   PLAYER_TINTS,
+  TILE_SIZE,
 } from "@/lib/phaser-config";
-import type {
-  CharacterClass,
-  GameRoom,
-  GiftBox,
-  Monster,
-  Player,
-} from "@/lib/types";
+import type { GameRoom, GiftBox, Monster, Player } from "@/lib/types";
 
 export interface OpenWorldSync {
   room: GameRoom;
   currentPlayerId: string;
   onMove?: (x: number, y: number) => void;
-  onAttackMonster?: (id: string) => void;
-  onCollectGift?: (id: string) => void;
+  onAttackMonster?: (id: string, x: number, y: number) => void;
+  onCollectGift?: (id: string, x: number, y: number) => void;
+  onReady?: () => void;
 }
 
 function assetUrl(path: string) {
-  const base = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_BASE_PATH ?? "" : "";
+  const base =
+    typeof window !== "undefined" ? process.env.NEXT_PUBLIC_BASE_PATH ?? "" : "";
   return `${base}${path}`;
 }
+
+/** 8×6 tile grid in tiles.png (32×32) — rows 4–5 are sand */
+const SAND = [32, 33, 34, 35, 36, 37, 38, 39, 40, 41];
+const DECOR: { frame: number; x: number; y: number }[] = [
+  { frame: 2, x: 120, y: 100 },
+  { frame: 3, x: 280, y: 180 },
+  { frame: 4, x: 720, y: 140 },
+  { frame: 5, x: 860, y: 220 },
+  { frame: 10, x: 200, y: 480 },
+  { frame: 11, x: 640, y: 520 },
+  { frame: 12, x: 400, y: 560 },
+  { frame: 13, x: 800, y: 480 },
+  { frame: 14, x: 100, y: 300 },
+  { frame: 15, x: 900, y: 380 },
+];
 
 export class OpenWorldScene extends Phaser.Scene {
   private sync: OpenWorldSync | null = null;
@@ -39,12 +51,17 @@ export class OpenWorldScene extends Phaser.Scene {
   private wasd?: Record<string, Phaser.Input.Keyboard.Key>;
   private lastMoveSend = 0;
   private assetsOk = false;
+  private readySent = false;
 
   constructor() {
     super({ key: "OpenWorldScene" });
   }
 
   preload() {
+    this.load.spritesheet("tiles", assetUrl("/rpg/tiles.png"), {
+      frameWidth: TILE_SIZE,
+      frameHeight: TILE_SIZE,
+    });
     this.load.spritesheet("dude", assetUrl("/rpg/dude.png"), {
       frameWidth: FRAME.w,
       frameHeight: FRAME.h,
@@ -52,6 +69,9 @@ export class OpenWorldScene extends Phaser.Scene {
   }
 
   create() {
+    this.input.setTopOnly(false);
+    this.input.mouse?.disableContextMenu();
+
     this.drawWorld();
     this.createAnims();
 
@@ -67,10 +87,14 @@ export class OpenWorldScene extends Phaser.Scene {
     }
 
     this.input.keyboard?.on("keydown-E", () => this.tryInteract());
+    this.input.on("pointerdown", () => this.focusCanvas());
 
     this.assetsOk = this.textures.exists("dude");
     this.game.events.on("sync-open-world", this.applySync, this);
     if (this.sync) this.applySync(this.sync);
+
+    this.focusCanvas();
+    this.notifyReady();
   }
 
   setSync(data: OpenWorldSync) {
@@ -78,21 +102,66 @@ export class OpenWorldScene extends Phaser.Scene {
     if (this.sys?.isActive()) this.applySync(data);
   }
 
+  private focusCanvas() {
+    const canvas = this.game.canvas;
+    if (!canvas.hasAttribute("tabindex")) {
+      canvas.setAttribute("tabindex", "0");
+      canvas.style.outline = "none";
+    }
+    canvas.focus();
+  }
+
+  private notifyReady() {
+    if (this.readySent) return;
+    this.readySent = true;
+    this.sync?.onReady?.();
+    this.game.events.emit("open-world-ready");
+  }
+
+  private getSelfPos(): { x: number; y: number } | null {
+    const id = this.sync?.currentPlayerId;
+    if (!id) return null;
+    const spr = this.playerSprites.get(id);
+    if (spr) return { x: spr.x, y: spr.y };
+    const me = this.sync?.room.players[id];
+    return me ? { x: me.pos.x, y: me.pos.y } : null;
+  }
+
   private drawWorld() {
-    const g = this.add.graphics();
-    g.fillGradientStyle(0x0f1419, 0x0f1419, 0x1a2332, 0x1a2332, 1);
-    g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    const cols = Math.ceil(GAME_WIDTH / TILE_SIZE);
+    const rows = Math.ceil(GAME_HEIGHT / TILE_SIZE);
+    const hasTiles = this.textures.exists("tiles");
 
-    // Grid kinh tế
-    g.lineStyle(1, 0x2a3544, 0.5);
-    for (let x = 0; x < GAME_WIDTH; x += 48) {
-      g.lineBetween(x, 0, x, GAME_HEIGHT);
-    }
-    for (let y = 0; y < GAME_HEIGHT; y += 48) {
-      g.lineBetween(0, y, GAME_WIDTH, y);
+    for (let ty = 0; ty < rows; ty++) {
+      for (let tx = 0; tx < cols; tx++) {
+        const x = tx * TILE_SIZE + TILE_SIZE / 2;
+        const y = ty * TILE_SIZE + TILE_SIZE / 2;
+        if (hasTiles) {
+          const frame = SAND[(tx + ty * 3) % SAND.length];
+          this.add.image(x, y, "tiles", frame).setDepth(0);
+        } else {
+          const g = this.add.graphics();
+          g.fillStyle(0xc4a574, 1);
+          g.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          g.setDepth(0);
+        }
+      }
     }
 
-    // Landmark labels
+    if (hasTiles) {
+      for (const d of DECOR) {
+        if (this.textures.get("tiles").frameTotal > d.frame) {
+          this.add.image(d.x, d.y, "tiles", d.frame).setDepth(1).setScale(1);
+        }
+      }
+    }
+
+    // Hub plaza
+    const hub = this.add.graphics();
+    hub.fillStyle(0x8a9aaa, 0.25);
+    hub.fillRoundedRect(HUB_POS.x - 80, HUB_POS.y - 60, 160, 120, 8);
+    hub.setDepth(2);
+
     const landmarks = [
       { x: 160, y: 120, t: "🏦 Ngân hàng" },
       { x: 800, y: 120, t: "📈 Sàn CK" },
@@ -102,22 +171,27 @@ export class OpenWorldScene extends Phaser.Scene {
     for (const lm of landmarks) {
       this.add
         .text(lm.x, lm.y, lm.t, {
-          fontSize: "11px",
-          color: "#8899aa",
+          fontSize: "12px",
+          color: "#fff",
           stroke: "#000",
-          strokeThickness: 2,
+          strokeThickness: 3,
+          backgroundColor: "#00000088",
+          padding: { x: 6, y: 3 },
         })
         .setOrigin(0.5)
-        .setAlpha(0.7);
+        .setDepth(3);
     }
 
     this.add
-      .text(HUB_POS.x, HUB_POS.y, "MLN122 Open World", {
-        fontSize: "14px",
-        color: "#667788",
+      .text(HUB_POS.x, HUB_POS.y, "Quảng trường MLN122", {
+        fontSize: "13px",
+        color: "#fff",
+        stroke: "#000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5)
-      .setAlpha(0.4);
+      .setDepth(3)
+      .setAlpha(0.85);
   }
 
   private createAnims() {
@@ -140,14 +214,17 @@ export class OpenWorldScene extends Phaser.Scene {
       frameRate: 10,
       repeat: -1,
     });
-    this.anims.create({ key: "idle", frames: [{ key: "dude", frame: 0 }], frameRate: 1 });
+    this.anims.create({
+      key: "idle",
+      frames: [{ key: "dude", frame: 0 }],
+      frameRate: 1,
+    });
   }
 
   private applySync(data: OpenWorldSync) {
     this.sync = data;
     const room = data.room;
 
-    // Monsters ($)
     for (const m of room.monsters) {
       this.upsertMonster(m);
     }
@@ -158,7 +235,6 @@ export class OpenWorldScene extends Phaser.Scene {
       }
     }
 
-    // Gifts
     for (const g of room.gifts) {
       if (!g.collected) this.upsertGift(g);
       else {
@@ -167,7 +243,6 @@ export class OpenWorldScene extends Phaser.Scene {
       }
     }
 
-    // Players
     for (const p of Object.values(room.players)) {
       this.upsertPlayer(p, p.id === data.currentPlayerId);
     }
@@ -192,14 +267,18 @@ export class OpenWorldScene extends Phaser.Scene {
     if (!c) {
       c = this.add.container(m.x, m.y);
       c.setDepth(8);
-      c.setSize(60, 60);
-      c.setInteractive(
-        new Phaser.Geom.Circle(0, 0, 36),
-        Phaser.Geom.Circle.Contains
-      );
-      c.on("pointerdown", () => this.sync?.onAttackMonster?.(m.id));
+      c.setSize(72, 72);
 
-      const glow = this.add.circle(0, 0, 38, 0xf0b429, 0.15);
+      const hit = this.add.circle(0, 0, 40, 0xffffff, 0.001);
+      c.add(hit);
+      hit.setInteractive({ useHandCursor: true });
+      hit.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        pointer.event.stopPropagation();
+        const pos = this.getSelfPos();
+        if (pos) this.sync?.onAttackMonster?.(m.id, pos.x, pos.y);
+      });
+
+      const glow = this.add.circle(0, 0, 38, 0xf0b429, 0.2);
       const body = this.add
         .text(0, 0, "$", {
           fontSize: "48px",
@@ -243,24 +322,28 @@ export class OpenWorldScene extends Phaser.Scene {
   }
 
   private upsertGift(g: GiftBox) {
-    let c = this.giftSprites.get(g.id);
+    const giftId = g.id;
+    let c = this.giftSprites.get(giftId);
     const landed = !!g.landedAt;
     const startY = landed ? g.y : -40;
 
     if (!c) {
       c = this.add.container(g.x, startY);
-      c.setDepth(7);
-      c.setInteractive(
-        new Phaser.Geom.Rectangle(-24, -24, 48, 48),
-        Phaser.Geom.Rectangle.Contains
-      );
-      c.on("pointerdown", () => {
-        if (g.landedAt) this.sync?.onCollectGift?.(g.id);
+      c.setDepth(9);
+
+      const hit = this.add.rectangle(0, 0, 48, 48, 0xffffff, 0.001);
+      c.add(hit);
+      hit.setInteractive({ useHandCursor: true });
+      hit.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        pointer.event.stopPropagation();
+        const pos = this.getSelfPos();
+        const live = this.sync?.room.gifts.find((x) => x.id === giftId);
+        if (pos && live?.landedAt && !live.collected) {
+          this.sync?.onCollectGift?.(giftId, pos.x, pos.y);
+        }
       });
 
-      const box = this.add
-        .text(0, 0, "🎁", { fontSize: "36px" })
-        .setOrigin(0.5);
+      const box = this.add.text(0, 0, "🎁", { fontSize: "36px" }).setOrigin(0.5);
       c.add(box);
 
       if (!landed) {
@@ -271,9 +354,10 @@ export class OpenWorldScene extends Phaser.Scene {
           ease: "Bounce.easeOut",
         });
       }
-      this.giftSprites.set(g.id, c);
+      this.giftSprites.set(giftId, c);
+    } else if (landed && c.y !== g.y) {
+      c.setPosition(g.x, g.y);
     }
-    if (landed) c.setPosition(g.x, g.y);
   }
 
   private upsertPlayer(p: Player, isSelf: boolean) {
@@ -303,6 +387,7 @@ export class OpenWorldScene extends Phaser.Scene {
         backgroundColor: isSelf ? "#fff" : "#000000bb",
         padding: { x: 4, y: 2 },
       });
+      label.setDepth(11);
       (spr as typeof spr & { label: Phaser.GameObjects.Text }).label = label;
       this.playerSprites.set(p.id, spr);
     }
@@ -330,19 +415,37 @@ export class OpenWorldScene extends Phaser.Scene {
     const data = this.sync;
     if (!data) return;
     const me = data.room.players[data.currentPlayerId];
-    if (!me || me.status === "in_combat") return;
+    const pos = this.getSelfPos();
+    if (!me || !pos || me.status === "in_combat") return;
 
     let nearest: Monster | null = null;
     let minD = 999;
     for (const m of data.room.monsters) {
       if (!m.alive) continue;
-      const d = Phaser.Math.Distance.Between(me.pos.x, me.pos.y, m.x, m.y);
-      if (d < 90 && d < minD) {
+      const d = Phaser.Math.Distance.Between(pos.x, pos.y, m.x, m.y);
+      if (d < 100 && d < minD) {
         minD = d;
         nearest = m;
       }
     }
-    if (nearest) data.onAttackMonster?.(nearest.id);
+    if (nearest) {
+      data.onAttackMonster?.(nearest.id, pos.x, pos.y);
+      return;
+    }
+
+    let nearestGift: GiftBox | null = null;
+    minD = 999;
+    for (const g of data.room.gifts) {
+      if (g.collected || !g.landedAt) continue;
+      const d = Phaser.Math.Distance.Between(pos.x, pos.y, g.x, g.y);
+      if (d < 80 && d < minD) {
+        minD = d;
+        nearestGift = g;
+      }
+    }
+    if (nearestGift) {
+      data.onCollectGift?.(nearestGift.id, pos.x, pos.y);
+    }
   }
 
   update() {
@@ -372,14 +475,14 @@ export class OpenWorldScene extends Phaser.Scene {
     if (vx !== 0 || vy !== 0) {
       if (this.assetsOk) {
         if (Math.abs(vx) > Math.abs(vy)) {
-          selfSpr.anims.play(vx > 0 ? "walk-right" : "walk-right", true);
+          selfSpr.anims.play("walk-right", true);
           selfSpr.setFlipX(vx < 0);
         } else {
           selfSpr.anims.play(vy > 0 ? "walk-down" : "walk-up", true);
         }
       }
       const now = Date.now();
-      if (now - this.lastMoveSend > 200) {
+      if (now - this.lastMoveSend > 150) {
         this.lastMoveSend = now;
         data.onMove?.(selfSpr.x, selfSpr.y);
       }
@@ -404,12 +507,12 @@ export function createOpenWorldGame(
   const scene = new OpenWorldScene();
   scene.setSync(initial);
 
-  return new Phaser.Game({
-    type: Phaser.WEBGL,
+  const game = new Phaser.Game({
+    type: Phaser.AUTO,
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
     parent,
-    backgroundColor: "#0f1419",
+    backgroundColor: "#c4a574",
     physics: {
       default: "arcade",
       arcade: { gravity: { x: 0, y: 0 } },
@@ -423,6 +526,13 @@ export function createOpenWorldGame(
     audio: { noAudio: true },
     banner: false,
   });
+
+  const canvas = game.canvas;
+  canvas.setAttribute("tabindex", "0");
+  canvas.style.outline = "none";
+  canvas.style.cursor = "crosshair";
+
+  return game;
 }
 
 export function syncOpenWorld(game: Phaser.Game | null, data: OpenWorldSync) {

@@ -133,6 +133,7 @@ export interface CombatQuestionView {
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
+export const GAME_PREP_MS = 12 * 1000;
 export const GAME_DURATION_MS = 5 * 60 * 1000;
 export const ENDING_SOON_MS = 30 * 1000;
 export const GIFT_SPAWN_DELAY_MS = 30 * 1000;

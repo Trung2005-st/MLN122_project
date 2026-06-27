@@ -9,8 +9,8 @@ interface Props {
   room: GameRoom;
   currentPlayerId: string;
   onMove: (x: number, y: number) => void;
-  onAttackMonster: (id: string) => void;
-  onCollectGift: (id: string) => void;
+  onAttackMonster: (id: string, x: number, y: number) => void;
+  onCollectGift: (id: string, x: number, y: number) => void;
 }
 
 export function PhaserGameWorld({
@@ -29,6 +29,10 @@ export function PhaserGameWorld({
   callbacksRef.current = { onMove, onAttackMonster, onCollectGift };
 
   useEffect(() => {
+    import("./phaser/OpenWorldScene");
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     let observer: ResizeObserver | null = null;
 
@@ -44,12 +48,16 @@ export function PhaserGameWorld({
           room,
           currentPlayerId,
           onMove: (x, y) => callbacksRef.current.onMove(x, y),
-          onAttackMonster: (id) => callbacksRef.current.onAttackMonster(id),
-          onCollectGift: (id) => callbacksRef.current.onCollectGift(id),
+          onAttackMonster: (id, x, y) =>
+            callbacksRef.current.onAttackMonster(id, x, y),
+          onCollectGift: (id, x, y) =>
+            callbacksRef.current.onCollectGift(id, x, y),
+          onReady: () => {
+            if (mounted) setStatus("ready");
+          },
         };
 
         gameRef.current = createOpenWorldGame(containerRef.current, sync);
-        setStatus("ready");
       } catch (e) {
         initRef.current = false;
         setStatus("error");
@@ -74,27 +82,34 @@ export function PhaserGameWorld({
   }, []);
 
   useEffect(() => {
-    if (!gameRef.current || status !== "ready") return;
+    if (!gameRef.current) return;
     import("./phaser/OpenWorldScene").then(({ syncOpenWorld }) => {
       syncOpenWorld(gameRef.current, {
         room,
         currentPlayerId,
         onMove: (x, y) => callbacksRef.current.onMove(x, y),
-        onAttackMonster: (id) => callbacksRef.current.onAttackMonster(id),
-        onCollectGift: (id) => callbacksRef.current.onCollectGift(id),
+        onAttackMonster: (id, x, y) =>
+          callbacksRef.current.onAttackMonster(id, x, y),
+        onCollectGift: (id, x, y) =>
+          callbacksRef.current.onCollectGift(id, x, y),
       });
     });
-  }, [room, currentPlayerId, status]);
+  }, [room, currentPlayerId]);
 
   const playing = room.phase === "playing" || room.phase === "ending_soon";
 
   return (
-    <div className="relative w-full rounded-2xl border border-white/[0.08] overflow-hidden bg-[#0f1419]">
-      <div ref={containerRef} className="w-full min-h-[320px] aspect-[960/640]" />
+    <div className="relative w-full rounded-2xl border border-white/[0.08] overflow-hidden bg-[#c4a574]">
+      <div
+        ref={containerRef}
+        className="w-full min-h-[320px] aspect-[960/640]"
+        onClick={() => gameRef.current?.canvas?.focus()}
+      />
 
       {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#0f1419]/90">
-          <p className="text-zinc-400 text-sm animate-pulse">Đang tải thế giới...</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0f1419]/90 gap-2">
+          <p className="text-zinc-300 text-sm animate-pulse">Đang tải bản đồ...</p>
+          <p className="text-zinc-500 text-xs">Timer chưa chạy trong 12s đầu</p>
         </div>
       )}
 
@@ -106,14 +121,14 @@ export function PhaserGameWorld({
 
       {playing && status === "ready" && (
         <div className="absolute bottom-3 left-3 flex flex-wrap gap-2 pointer-events-none z-10">
-          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-400 border border-white/10">
-            WASD di chuyển
+          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-300 border border-white/10">
+            Click map rồi WASD di chuyển
           </span>
-          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-400 border border-white/10">
-            E / Click $ để đánh quái
+          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-300 border border-white/10">
+            E / Click $ đánh quái
           </span>
-          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-400 border border-white/10">
-            Chạm người chơi → PvP
+          <span className="text-[10px] px-2 py-1 rounded bg-black/70 text-zinc-300 border border-white/10">
+            E / Click 🎁 nhặt quà
           </span>
         </div>
       )}

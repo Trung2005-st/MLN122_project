@@ -141,14 +141,22 @@ export async function startGame(code: string, hostId: string): Promise<GameRoom>
 
 export type ActionPayload =
   | { type: "move"; x: number; y: number }
-  | { type: "attack_monster"; monsterId: string }
+  | { type: "attack_monster"; monsterId: string; x: number; y: number }
   | { type: "challenge_player"; targetId: string }
   | { type: "accept_challenge" }
   | { type: "reject_challenge" }
   | { type: "answer"; combatId: string; choiceIndex: number }
   | { type: "flee"; combatId: string }
-  | { type: "collect_gift"; giftId: string }
+  | { type: "collect_gift"; giftId: string; x: number; y: number }
   | { type: "use_swap_card" };
+
+function syncPlayerPos(p: Player, x: number, y: number): void {
+  const nx = Math.max(40, Math.min(MAP_W - 40, x));
+  const ny = Math.max(40, Math.min(MAP_H - 40, y));
+  const d = dist(p.pos, { x: nx, y: ny });
+  if (d > 200) throw new Error("Vị trí không hợp lệ");
+  p.pos = { x: nx, y: ny };
+}
 
 export async function handleAction(
   code: string,
@@ -198,12 +206,13 @@ export async function handleAction(
         if (p.status === "in_combat" || isPlayerLocked(p)) {
           throw new Error("Không thể đánh lúc này");
         }
+        syncPlayerPos(p, action.x, action.y);
         const monster = room.monsters.find(
           (m) => m.id === action.monsterId && m.alive
         );
         if (!monster) throw new Error("Quái không còn");
-        if (dist(p.pos, { x: monster.x, y: monster.y }) > 90) {
-          throw new Error("Quái quá xa");
+        if (dist(p.pos, { x: monster.x, y: monster.y }) > 100) {
+          throw new Error("Quái quá xa — đi lại gần hơn");
         }
         startPveCombat(room, playerId, monster.id);
         break;
@@ -271,12 +280,13 @@ export async function handleAction(
         if (isPlayerLocked(p) || p.status === "in_combat") {
           throw new Error("Không thể nhặt quà lúc này");
         }
+        syncPlayerPos(p, action.x, action.y);
         const gift = room.gifts.find(
           (g) => g.id === action.giftId && !g.collected && g.landedAt
         );
-        if (!gift) throw new Error("Quà không tồn tại");
-        if (dist(p.pos, { x: gift.x, y: gift.y }) > 70) {
-          throw new Error("Quà quá xa");
+        if (!gift) throw new Error("Quà không tồn tại hoặc chưa rơi xong");
+        if (dist(p.pos, { x: gift.x, y: gift.y }) > 80) {
+          throw new Error("Quà quá xa — đi lại gần hơn");
         }
         applyGift(room, playerId, gift);
         break;

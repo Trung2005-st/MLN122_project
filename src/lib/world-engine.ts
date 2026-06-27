@@ -14,6 +14,7 @@ import type {
 import {
   ENDING_SOON_MS,
   GAME_DURATION_MS,
+  GAME_PREP_MS,
   GIFT_SPAWN_DELAY_MS,
   LOCK_DURATION_MS,
   MAP_H,
@@ -389,8 +390,8 @@ export function initGameWorld(room: GameRoom): GameRoom {
   const now = Date.now();
   room.phase = "playing";
   room.phaseStartedAt = now;
-  room.gameStartedAt = now;
-  room.gameEndsAt = now + GAME_DURATION_MS;
+  room.gameStartedAt = now + GAME_PREP_MS;
+  room.gameEndsAt = now + GAME_PREP_MS + GAME_DURATION_MS;
   room.monsters = spawnMonsters(8);
   room.gifts = [];
   room.combats = {};
@@ -408,6 +409,6 @@ export function initGameWorld(room: GameRoom): GameRoom {
     p.activeCombatId = undefined;
   }
 
-  addEvent(room, "🗺️ Thế giới mở — đánh quái $, PvP, nhặt quà!");
+  addEvent(room, "🗺️ Chuẩn bị 12s — di chuyển WASD, click $ để đánh quái!");
   return room;
 }
