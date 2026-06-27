@@ -101,7 +101,10 @@ export class WorldScene extends Phaser.Scene {
 
   setSyncData(data: WorldSyncPayload) {
     this.syncData = data;
-    if (this.scene.isActive()) this.applySync(data);
+    // Scene chưa boot → create() sẽ apply; đã chạy → apply ngay
+    if (this.sys?.isActive()) {
+      this.applySync(data);
+    }
   }
 
   /** Nền map — tiles.png là 1 ảnh, KHÔNG dùng frame index */
