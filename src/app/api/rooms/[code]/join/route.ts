@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import { joinRoom } from "@/lib/room-store";
+import type { CharacterClass } from "@/lib/types";
+
+const VALID_CLASSES: CharacterClass[] = [
+  "lender",
+  "borrower",
+  "farmer",
+  "speculator",
+];
 
 export async function POST(
   request: Request,
@@ -9,12 +17,16 @@ export async function POST(
     const body = await request.json();
     const playerName = (body.playerName as string)?.trim();
     const playerId = body.playerId as string | undefined;
+    const characterClass = body.characterClass as CharacterClass | undefined;
 
     if (!playerName || playerName.length < 2 || playerName.length > 20) {
       return NextResponse.json(
         { error: "Tên phải từ 2–20 ký tự" },
         { status: 400 }
       );
+    }
+    if (characterClass && !VALID_CLASSES.includes(characterClass)) {
+      return NextResponse.json({ error: "Nhân vật không hợp lệ" }, { status: 400 });
     }
 
     const { customAlphabet } = await import("nanoid");
@@ -24,7 +36,8 @@ export async function POST(
     const { room, player } = await joinRoom(
       params.code.toUpperCase(),
       id,
-      playerName
+      playerName,
+      characterClass
     );
 
     return NextResponse.json({

@@ -22,12 +22,17 @@ import {
 
 const genCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 6);
 
-export function createEmptyRoom(hostId: string, hostName: string): GameRoom {
+export function createEmptyRoom(
+  hostId: string,
+  hostName: string,
+  characterClass?: import("./types").CharacterClass
+): GameRoom {
   const code = genCode();
   const now = Date.now();
   const host: Player = {
     id: hostId,
     name: hostName,
+    characterClass,
     joinedAt: now,
     isHost: true,
     totalScore: 0,
@@ -66,13 +71,14 @@ export async function loadRoom(code: string): Promise<GameRoom | null> {
 
 export async function createRoom(
   hostId: string,
-  hostName: string
+  hostName: string,
+  characterClass?: import("./types").CharacterClass
 ): Promise<GameRoom> {
-  let room = createEmptyRoom(hostId, hostName);
+  let room = createEmptyRoom(hostId, hostName, characterClass);
   for (let i = 0; i < 10; i++) {
     const existing = await loadRoom(room.code);
     if (!existing) break;
-    room = createEmptyRoom(hostId, hostName);
+    room = createEmptyRoom(hostId, hostName, characterClass);
   }
   await saveRoom(room);
   return room;
@@ -81,7 +87,8 @@ export async function createRoom(
 export async function joinRoom(
   code: string,
   playerId: string,
-  playerName: string
+  playerName: string,
+  characterClass?: import("./types").CharacterClass
 ): Promise<{ room: GameRoom; player: Player }> {
   return withRoomLock(code, async () => {
     const room = await loadRoom(code);
@@ -90,6 +97,7 @@ export async function joinRoom(
     if (room.players[playerId]) {
       room.players[playerId].lastSeen = Date.now();
       room.players[playerId].name = playerName;
+      if (characterClass) room.players[playerId].characterClass = characterClass;
       await saveRoom(room);
       return { room, player: room.players[playerId] };
     }
@@ -100,6 +108,7 @@ export async function joinRoom(
     const player: Player = {
       id: playerId,
       name: playerName,
+      characterClass,
       joinedAt: now,
       isHost: false,
       totalScore: 0,

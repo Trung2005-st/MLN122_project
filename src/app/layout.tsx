@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({
+  subsets: ["latin", "vietnamese"],
+  variable: "--font-inter",
+});
+
 export const metadata: Metadata = {
-  title: "Thặng Dư Arena | MLN122",
+  title: "Thặng Dư Chronicles | MLN122 RPG",
   description:
-    "Đấu trường phân bổ tư bản multiplayer — Lợi tức & Địa tô theo C. Mác",
-  openGraph: {
-    title: "Thặng Dư Arena",
-    description: "Game kinh tế chính trị Mác-Lênin — không phải quiz!",
-  },
+    "RPG map 2D multiplayer — Lợi tức & Địa tô theo C. Mác. Khám phá, phân bổ vốn, đua top.",
 };
 
 export default function RootLayout({
@@ -17,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi">
-      <body className="font-body">{children}</body>
+    <html lang="vi" className={inter.variable}>
+      <body className="font-sans antialiased">{children}</body>
     </html>
   );
 }

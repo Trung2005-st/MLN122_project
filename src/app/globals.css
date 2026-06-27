@@ -2,43 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-display: "Georgia", "Times New Roman", serif;
-  --font-body: system-ui, -apple-system, sans-serif;
-}
+@layer base {
+  body {
+    @apply bg-black text-white antialiased;
+    font-family: var(--font-inter), system-ui, sans-serif;
+  }
 
-body {
-  @apply bg-arena-bg text-white antialiased;
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201, 162, 39, 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(139, 38, 53, 0.08), transparent);
-  min-height: 100vh;
+  ::selection {
+    @apply bg-blue-500/30;
+  }
 }
 
 @layer utilities {
-  .glass-panel {
-    @apply bg-arena-panel/90 backdrop-blur-md border border-arena-border/60 rounded-2xl;
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-fuchsia-400;
   }
-
-  .gold-glow {
-    box-shadow: 0 0 30px rgba(201, 162, 39, 0.15);
-  }
-}
-
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 6px;
-  border-radius: 3px;
-  background: #1e3a5f;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #c9a227;
-  cursor: pointer;
-  box-shadow: 0 0 8px rgba(201, 162, 39, 0.5);
 }

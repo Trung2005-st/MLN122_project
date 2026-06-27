@@ -1,16 +1,16 @@
-# Thặng Dư Arena — MLN122
+# Thặng Dư Chronicles — MLN122 RPG
 
-Game web **multiplayer realtime** về **Lợi tức** và **Địa tô tư bản chủ nghĩa** (C. Mác), deploy trên Vercel.
+Game web **RPG map 2D multiplayer** về **Lợi tức** và **Địa tô tư bản chủ nghĩa** (C. Mác), deploy trên Vercel.
 
-> **Không phải quiz/Kahoot.** Cơ chế: phân bổ vốn bí mật → hé lộ đồng thời → thị trường tính điểm theo lý thuyết.
+> **Không phải quiz/Kahoot.** Chọn nhân vật → khám phá bản đồ 4 vùng → phân bổ vốn bí mật → nhân vật di chuyển → đua thặng dư.
 
 ## Cách chơi
 
-1. Tạo phòng hoặc nhập mã phòng (2–8 người)
-2. Host bấm **Bắt đầu đấu** — 5 vòng kinh tế
-3. Mỗi vòng: đọc kịch bản → phân bổ 100 điểm vào 4 kênh tư bản
-4. Cùng lúc hé lộ chiến thuật → hệ thống tính thặng dư (z', địa tô R, T→T'...)
-5. Sự kiện bất ngờ, bảng xếp hạng lưu trên Redis
+1. Chọn **class nhân vật** (Tư bản cho vay, Đi vay, Nông nghiệp, Đầu cơ T→T')
+2. Tạo/vào phòng (2–8 người) trên **bản đồ 2D**
+3. Mỗi vòng: NPC C. Mác giao nhiệm vụ → click vùng trên map để đặt vốn (100 điểm)
+4. Nhân vật di chuyển theo chiến lược → hé lộ đồng thời → tính thặng dư
+5. Sự kiện bất ngờ, bảng xếp hạng Redis
 
 ## Tech stack
 

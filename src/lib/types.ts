@@ -1,3 +1,9 @@
+export type CharacterClass =
+  | "lender" // Tư bản cho vay
+  | "borrower" // Tư bản đi vay
+  | "farmer" // KT nông nghiệp
+  | "speculator"; // Tư bản giả
+
 export type AllocationBucket =
   | "lend" // Tư bản cho vay
   | "borrow" // Tư bản đi vay / sản xuất
@@ -66,6 +72,7 @@ export interface RoundBreakdown {
 export interface Player {
   id: string;
   name: string;
+  characterClass?: CharacterClass;
   joinedAt: number;
   isHost: boolean;
   totalScore: number;
@@ -135,10 +142,10 @@ export const BUCKET_LABELS: Record<
 
 export const PHASE_DURATIONS_MS: Record<GamePhase, number> = {
   lobby: Infinity,
-  briefing: 12000,
-  allocating: 45000,
-  reveal: 10000,
-  resolution: 14000,
+  briefing: 16000,
+  allocating: 55000,
+  reveal: 12000,
+  resolution: 16000,
   finished: Infinity,
 };
 
