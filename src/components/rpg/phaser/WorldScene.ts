@@ -25,6 +25,14 @@ export interface WorldSyncPayload {
   onAllocate?: (zone: AllocationBucket, amount: number) => void;
 }
 
+function assetUrl(path: string): string {
+  if (typeof window !== "undefined") {
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    return `${base}${path}`;
+  }
+  return path;
+}
+
 export class WorldScene extends Phaser.Scene {
   private syncData: WorldSyncPayload | null = null;
   private playerSprites = new Map<
@@ -41,21 +49,37 @@ export class WorldScene extends Phaser.Scene {
     S: Phaser.Input.Keyboard.Key;
     D: Phaser.Input.Keyboard.Key;
   };
+  private assetsOk = { tiles: false, dude: false };
 
   constructor() {
     super({ key: "WorldScene" });
   }
 
   preload() {
-    this.load.spritesheet("dude", "/rpg/dude.png", {
+    this.load.on("loaderror", (file: { key: string; url?: string }) => {
+      console.warn("[WorldScene] Load failed:", file.key, file.url);
+    });
+
+    this.load.spritesheet("dude", assetUrl("/rpg/dude.png"), {
       frameWidth: FRAME.w,
       frameHeight: FRAME.h,
     });
-    this.load.image("tiles", "/rpg/tiles.png");
+    this.load.image("tiles", assetUrl("/rpg/tiles.png"));
   }
 
   create() {
-    this.drawTilemap();
+    this.assetsOk.tiles = this.textures.exists("tiles");
+    this.assetsOk.dude = this.textures.exists("dude");
+
+    if (!this.assetsOk.dude) {
+      const g = this.make.graphics({});
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(16, 16, 14);
+      g.generateTexture("player-dot", 32, 32);
+      g.destroy();
+    }
+
+    this.drawTerrain();
     this.drawPaths();
     this.createAnimations();
     this.createZones();
@@ -80,47 +104,61 @@ export class WorldScene extends Phaser.Scene {
     if (this.scene.isActive()) this.applySync(data);
   }
 
-  private drawTilemap() {
-    const tileSize = 32;
-    const cols = Math.ceil(GAME_WIDTH / tileSize);
-    const rows = Math.ceil(GAME_HEIGHT / tileSize);
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const frame = ((x + y) % 3) + 28;
-        const tile = this.add.image(
-          x * tileSize + tileSize / 2,
-          y * tileSize + tileSize / 2,
-          "tiles",
-          frame
-        );
-        tile.setDisplaySize(tileSize, tileSize);
-        tile.setDepth(0);
-        tile.setAlpha(0.85);
-      }
+  /** Nền map — tiles.png là 1 ảnh, KHÔNG dùng frame index */
+  private drawTerrain() {
+    if (this.assetsOk.tiles) {
+      const bg = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "tiles");
+      bg.setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+      bg.setDepth(0);
+      bg.setAlpha(0.92);
+    } else {
+      const g = this.add.graphics();
+      g.fillGradientStyle(0x2d5016, 0x2d5016, 0x1a3a0a, 0x1a3a0a, 1);
+      g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      g.setDepth(0);
     }
+
     const plaza = this.add.rectangle(
       HUB_POS.x,
       HUB_POS.y,
-      140,
-      100,
-      0x222233,
-      0.5
+      160,
+      110,
+      0x333344,
+      0.65
     );
-    plaza.setStrokeStyle(2, 0xffffff, 0.15);
+    plaza.setStrokeStyle(3, 0xffffff, 0.2);
     plaza.setDepth(1);
+
+    this.add
+      .text(HUB_POS.x, HUB_POS.y - 8, "⚖️", { fontSize: "32px" })
+      .setOrigin(0.5)
+      .setDepth(2);
+
+    this.add
+      .text(HUB_POS.x, HUB_POS.y + 28, "Quảng trường", {
+        fontSize: "12px",
+        color: "#cccccc",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(2);
   }
 
   private drawPaths() {
     const g = this.add.graphics();
-    g.lineStyle(3, 0xffffff, 0.12);
+    g.lineStyle(4, 0xffffff, 0.15);
     for (const z of WORLD_ZONES) {
       g.lineBetween(HUB_POS.x, HUB_POS.y, z.x, z.y);
     }
-    g.setDepth(2);
+    g.setDepth(3);
   }
 
+  /** dude.png = 288×48 → 9 frame (32×48). Chỉ dùng frame 0–8 */
   private createAnimations() {
+    if (!this.assetsOk.dude) return;
     if (this.anims.exists("walk-down")) return;
+
     this.anims.create({
       key: "walk-down",
       frames: this.anims.generateFrameNumbers("dude", { start: 0, end: 3 }),
@@ -128,20 +166,20 @@ export class WorldScene extends Phaser.Scene {
       repeat: -1,
     });
     this.anims.create({
-      key: "walk-left",
-      frames: this.anims.generateFrameNumbers("dude", { start: 4, end: 7 }),
+      key: "walk-right",
+      frames: this.anims.generateFrameNumbers("dude", { start: 5, end: 8 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
-      key: "walk-right",
-      frames: this.anims.generateFrameNumbers("dude", { start: 8, end: 11 }),
+      key: "walk-left",
+      frames: this.anims.generateFrameNumbers("dude", { start: 5, end: 8 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "walk-up",
-      frames: this.anims.generateFrameNumbers("dude", { start: 12, end: 15 }),
+      frames: this.anims.generateFrameNumbers("dude", { start: 0, end: 3 }),
       frameRate: 10,
       repeat: -1,
     });
@@ -158,12 +196,12 @@ export class WorldScene extends Phaser.Scene {
       ring.setDepth(5);
       this.zoneGraphics.push(ring);
 
-      const hit = this.add.circle(zone.x, zone.y, 52, zone.color, 0.15);
-      hit.setStrokeStyle(2, zone.color, 0.6);
+      const hit = this.add.circle(zone.x, zone.y, 56, zone.color, 0.2);
+      hit.setStrokeStyle(3, zone.color, 0.75);
       hit.setDepth(6);
       hit.setInteractive({ useHandCursor: true });
-      hit.on("pointerover", () => hit.setAlpha(0.35));
-      hit.on("pointerout", () => hit.setAlpha(0.15));
+      hit.on("pointerover", () => hit.setFillStyle(zone.color, 0.35));
+      hit.on("pointerout", () => hit.setFillStyle(zone.color, 0.2));
       hit.on("pointerdown", () => {
         const data = this.syncData;
         if (!data?.onAllocate || data.disabled || data.phase !== "allocating")
@@ -174,23 +212,24 @@ export class WorldScene extends Phaser.Scene {
       });
 
       this.add
-        .text(zone.x, zone.y + 62, zone.label, {
+        .text(zone.x, zone.y - 12, zone.label, {
           fontFamily: "system-ui, sans-serif",
-          fontSize: "13px",
+          fontSize: "14px",
+          fontStyle: "bold",
           color: "#ffffff",
           stroke: "#000000",
-          strokeThickness: 3,
+          strokeThickness: 4,
         })
         .setOrigin(0.5)
         .setDepth(7);
 
       const badge = this.add
-        .text(zone.x, zone.y - 58, "", {
+        .text(zone.x, zone.y + 42, "", {
           fontFamily: "monospace",
-          fontSize: "16px",
+          fontSize: "18px",
           color: "#000000",
           backgroundColor: "#ffffff",
-          padding: { x: 6, y: 3 },
+          padding: { x: 8, y: 4 },
         })
         .setOrigin(0.5)
         .setDepth(8)
@@ -232,8 +271,8 @@ export class WorldScene extends Phaser.Scene {
       const g = this.zoneGraphics[WORLD_ZONES.indexOf(zone)];
       g.clear();
       if (amount > 0 && isAllocating) {
-        g.lineStyle(3, zone.color, 0.8);
-        g.strokeCircle(zone.x, zone.y, 56 + Math.sin(this.time.now / 300) * 4);
+        g.lineStyle(3, zone.color, 0.9);
+        g.strokeCircle(zone.x, zone.y, 60 + Math.sin(this.time.now / 300) * 5);
       }
     }
 
@@ -263,10 +302,10 @@ export class WorldScene extends Phaser.Scene {
       }
 
       const idx = playerIds.indexOf(id);
-      const wx = (posPct.x / 100) * GAME_WIDTH + ((idx % 3) - 1) * 28;
-      const wy = (posPct.y / 100) * GAME_HEIGHT + (Math.floor(idx / 3) - 1) * 20;
+      const wx = (posPct.x / 100) * GAME_WIDTH + ((idx % 3) - 1) * 32;
+      const wy = (posPct.y / 100) * GAME_HEIGHT + (Math.floor(idx / 3) - 1) * 24;
 
-      this.upsertPlayer(id, p.name, p.characterClass, wx, wy, isSelf, hidden, idx);
+      this.upsertPlayer(id, p.name, wx, wy, isSelf, hidden, idx);
     }
 
     for (const id of Array.from(this.playerSprites.keys())) {
@@ -282,7 +321,6 @@ export class WorldScene extends Phaser.Scene {
   private upsertPlayer(
     id: string,
     name: string,
-    _cls: CharacterClass | undefined,
     tx: number,
     ty: number,
     isSelf: boolean,
@@ -290,53 +328,69 @@ export class WorldScene extends Phaser.Scene {
     tintIdx: number
   ) {
     let sprite = this.playerSprites.get(id);
+
     if (!sprite) {
-      sprite = this.physics.add.sprite(HUB_POS.x, HUB_POS.y, "dude", 0);
+      const tex = this.assetsOk.dude ? "dude" : "player-dot";
+      sprite = this.physics.add.sprite(HUB_POS.x, HUB_POS.y, tex, 0);
       sprite.setDepth(10 + tintIdx);
       sprite.setCollideWorldBounds(true);
       sprite.setTint(PLAYER_TINTS[tintIdx % PLAYER_TINTS.length]);
+
       const label = this.add
         .text(0, 0, name.slice(0, 10), {
-          fontSize: "11px",
+          fontSize: "12px",
           color: isSelf ? "#000" : "#fff",
-          backgroundColor: isSelf ? "#ffffff" : "#000000aa",
-          padding: { x: 4, y: 2 },
+          backgroundColor: isSelf ? "#ffffff" : "#000000cc",
+          padding: { x: 5, y: 2 },
         })
         .setDepth(15 + tintIdx);
-      (sprite as typeof sprite & { label: Phaser.GameObjects.Text }).label =
-        label;
+      (sprite as typeof sprite & { label: Phaser.GameObjects.Text }).label = label;
       this.playerSprites.set(id, sprite);
     }
 
     const lbl = sprite.label!;
     lbl.setText(hidden ? "???" : name.slice(0, 10));
-    lbl.setPosition(sprite.x - lbl.width / 2, sprite.y - 38);
 
     const dist = Phaser.Math.Distance.Between(sprite.x, sprite.y, tx, ty);
-    if (dist > 8) {
+    if (dist > 10) {
       this.moveSpriteTo(sprite, tx, ty);
-    } else if (!sprite.body?.velocity.length()) {
+    } else if (this.assetsOk.dude) {
       sprite.anims.play("idle", true);
     }
 
-    sprite.setAlpha(hidden ? 0.35 : 1);
-    sprite.setScale(isSelf ? 1.15 : 1);
+    sprite.setAlpha(hidden ? 0.4 : 1);
+    sprite.setScale(isSelf ? 1.2 : 1);
+    lbl.setPosition(sprite.x - lbl.width / 2, sprite.y - 42);
   }
 
   private moveSpriteTo(
-    sprite: Phaser.Physics.Arcade.Sprite & { label?: Phaser.GameObjects.Text },
+    sprite: Phaser.Physics.Arcade.Sprite & {
+      label?: Phaser.GameObjects.Text;
+    },
     tx: number,
     ty: number
   ) {
     const dx = tx - sprite.x;
     const dy = ty - sprite.y;
     let anim = "walk-down";
+    let flipX = false;
+
     if (Math.abs(dx) > Math.abs(dy)) {
-      anim = dx > 0 ? "walk-right" : "walk-left";
+      if (dx > 0) {
+        anim = "walk-right";
+      } else {
+        anim = "walk-left";
+        flipX = true;
+      }
     } else {
       anim = dy > 0 ? "walk-down" : "walk-up";
     }
-    sprite.anims.play(anim, true);
+
+    if (this.assetsOk.dude) {
+      sprite.anims.play(anim, true);
+      sprite.setFlipX(flipX);
+    }
+
     this.tweens.killTweensOf(sprite);
 
     this.tweens.add({
@@ -344,21 +398,21 @@ export class WorldScene extends Phaser.Scene {
       x: tx,
       y: ty,
       duration: Math.min(
-        900,
-        300 + Phaser.Math.Distance.Between(sprite.x, sprite.y, tx, ty)
+        1000,
+        350 + Phaser.Math.Distance.Between(sprite.x, sprite.y, tx, ty)
       ),
       ease: "Sine.easeInOut",
       onUpdate: () => {
         if (sprite.label) {
           sprite.label.setPosition(
             sprite.x - sprite.label.width / 2,
-            sprite.y - 38
+            sprite.y - 42
           );
         }
       },
       onComplete: () => {
         sprite.setVelocity(0);
-        sprite.anims.play("idle", true);
+        if (this.assetsOk.dude) sprite.anims.play("idle", true);
       },
     });
   }
@@ -370,7 +424,7 @@ export class WorldScene extends Phaser.Scene {
     const self = this.playerSprites.get(data.currentPlayerId);
     if (!self?.body) return;
 
-    const speed = 160;
+    const speed = 180;
     let vx = 0;
     let vy = 0;
     if (this.cursors?.left.isDown || this.wasd?.A.isDown) vx = -speed;
@@ -381,17 +435,21 @@ export class WorldScene extends Phaser.Scene {
     if (vx !== 0 || vy !== 0) {
       this.tweens.killTweensOf(self);
       self.setVelocity(vx, vy);
-      if (Math.abs(vx) > Math.abs(vy)) {
-        self.anims.play(vx > 0 ? "walk-right" : "walk-left", true);
-      } else {
-        self.anims.play(vy > 0 ? "walk-down" : "walk-up", true);
+      if (this.assetsOk.dude) {
+        if (Math.abs(vx) > Math.abs(vy)) {
+          self.anims.play(vx > 0 ? "walk-right" : "walk-left", true);
+          self.setFlipX(vx < 0);
+        } else {
+          self.anims.play(vy > 0 ? "walk-down" : "walk-up", true);
+        }
       }
-    } else if (self.body.velocity.length() < 1) {
+    } else {
       self.setVelocity(0);
+      if (this.assetsOk.dude) self.anims.play("idle", true);
     }
 
     if (self.label) {
-      self.label.setPosition(self.x - self.label.width / 2, self.y - 38);
+      self.label.setPosition(self.x - self.label.width / 2, self.y - 42);
     }
   }
 }
@@ -404,21 +462,28 @@ export function createPhaserGame(
   scene.setSyncData(initialData);
 
   return new Phaser.Game({
-    type: Phaser.AUTO,
+    type: Phaser.WEBGL,
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
     parent,
     backgroundColor: "#1a1a2e",
     physics: {
       default: "arcade",
-      arcade: { gravity: { x: 0, y: 0 } },
+      arcade: {
+        gravity: { x: 0, y: 0 },
+        debug: false,
+      },
     },
     scene: [scene],
     scale: {
-      mode: Phaser.Scale.FIT,
+      mode: Phaser.Scale.ENVELOP,
       autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: GAME_WIDTH,
+      height: GAME_HEIGHT,
     },
-    render: { pixelArt: true, antialias: false },
+    render: { pixelArt: true, antialias: false, roundPixels: true },
+    audio: { noAudio: true },
+    banner: false,
   });
 }
 
