@@ -3,17 +3,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { BackgroundEffects } from "@/components/rpg/BackgroundEffects";
 import { DialogueBox } from "@/components/rpg/DialogueBox";
-import { EconomicWorldMap } from "@/components/rpg/EconomicWorldMap";
 import { GameHUD } from "@/components/rpg/GameHUD";
 import { PhaseTimer } from "@/components/rpg/PhaseTimer";
 import { getScenario } from "@/lib/scenarios";
 import { getStoredPlayerId } from "@/lib/player-session";
 import { MAP_ZONES } from "@/lib/map-zones";
-import type { Allocation, GameRoom } from "@/lib/types";
+import type { Allocation, AllocationBucket, GameRoom } from "@/lib/types";
 import { EMPTY_ALLOCATION } from "@/lib/types";
+
+const PhaserGameWorld = dynamic(
+  () =>
+    import("@/components/rpg/PhaserGameWorld").then((m) => m.PhaserGameWorld),
+  { ssr: false, loading: () => (
+    <div className="aspect-[960/640] rounded-2xl bg-[#1a1a2e] flex items-center justify-center text-zinc-500 text-sm animate-pulse">
+      Đang tải bản đồ...
+    </div>
+  ) }
+);
 
 interface Props {
   code: string;
@@ -31,6 +41,13 @@ export function GameRoomClient({ code }: Props) {
   const [allocation, setAllocation] = useState<Allocation>(defaultAllocation());
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const allocationRoundRef = useRef(-1);
+  const allocationTouchedRef = useRef(false);
+
+  const handleAllocationChange = useCallback((a: Allocation) => {
+    allocationTouchedRef.current = true;
+    setAllocation(a);
+  }, []);
 
   const poll = useCallback(async () => {
     const pid = playerIdRef.current;
@@ -64,17 +81,26 @@ export function GameRoomClient({ code }: Props) {
     return () => clearInterval(interval);
   }, [poll, router]);
 
-  // Reset allocation each new round
+  // Reset vốn chỉ 1 lần khi vào vòng mới — không reset mỗi poll
   useEffect(() => {
-    if (room?.phase === "allocating") {
-      const me = playerIdRef.current
-        ? room.players[playerIdRef.current]
-        : null;
-      if (me && !me.locked && !me.allocation) {
-        setAllocation(defaultAllocation());
-      }
+    if (!room || room.phase !== "allocating") {
+      if (room?.phase === "lobby") allocationRoundRef.current = -1;
+      return;
     }
-  }, [room?.phase, room?.roundIndex, room?.players]);
+    if (allocationRoundRef.current === room.roundIndex) return;
+
+    allocationRoundRef.current = room.roundIndex;
+    allocationTouchedRef.current = false;
+
+    const me = playerIdRef.current
+      ? room.players[playerIdRef.current]
+      : null;
+    if (me?.locked && me.allocation) {
+      setAllocation({ ...me.allocation });
+    } else {
+      setAllocation(defaultAllocation());
+    }
+  }, [room?.phase, room?.roundIndex]);
 
   async function handleStart() {
     const pid = playerIdRef.current;
@@ -220,7 +246,7 @@ export function GameRoomClient({ code }: Props) {
                 . Cần ít nhất 2 nhà tư bản để bắt đầu cuộc phiêu lưu.
               </p>
               <div className="aspect-video rounded-xl border border-white/[0.06] bg-black/50 flex items-center justify-center overflow-hidden relative">
-                <EconomicWorldMap
+                <PhaserGameWorld
                   allocation={defaultAllocation()}
                   onAllocationChange={() => {}}
                   players={room.players}
@@ -272,9 +298,9 @@ export function GameRoomClient({ code }: Props) {
               )}
 
               <div className="relative">
-                <EconomicWorldMap
+                <PhaserGameWorld
                   allocation={allocation}
-                  onAllocationChange={setAllocation}
+                  onAllocationChange={handleAllocationChange}
                   players={room.players}
                   currentPlayerId={playerIdRef.current ?? ""}
                   phase={room.phase}
@@ -283,6 +309,36 @@ export function GameRoomClient({ code }: Props) {
                     room.phase === "reveal" || room.phase === "resolution"
                   }
                 />
+
+                {room.phase === "allocating" && !me?.locked && (
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {MAP_ZONES.map((z) => (
+                      <button
+                        key={z.id}
+                        type="button"
+                        onClick={() => {
+                          const total = Object.values(allocation).reduce(
+                            (a, b) => a + b,
+                            0
+                          );
+                          if (total + 10 > 100) return;
+                          handleAllocationChange({
+                            ...allocation,
+                            [z.id]: allocation[z.id as AllocationBucket] + 10,
+                          });
+                        }}
+                        disabled={
+                          Object.values(allocation).reduce((a, b) => a + b, 0) >=
+                          100
+                        }
+                        className="px-3 py-1.5 text-xs rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-30 transition"
+                        style={{ borderColor: `${z.color}44` }}
+                      >
+                        {z.icon} +10 {z.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <DialogueBox
                   speaker="C. Mác · Người hướng dẫn"

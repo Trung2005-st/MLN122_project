@@ -4,12 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { BackgroundEffects } from "@/components/rpg/BackgroundEffects";
 import { CharacterSelect } from "@/components/rpg/CharacterSelect";
-import { EconomicWorldMap } from "@/components/rpg/EconomicWorldMap";
 import { storePlayerSession } from "@/lib/player-session";
 import { EMPTY_ALLOCATION } from "@/lib/types";
 import type { CharacterClass } from "@/lib/types";
+
+const PhaserGameWorld = dynamic(
+  () =>
+    import("@/components/rpg/PhaserGameWorld").then((m) => m.PhaserGameWorld),
+  { ssr: false, loading: () => (
+    <div className="aspect-[960/640] rounded-2xl bg-[#1a1a2e] animate-pulse" />
+  ) }
+);
 
 export default function HomePage() {
   const router = useRouter();
@@ -104,7 +112,7 @@ export default function HomePage() {
             transition={{ delay: 0.3, duration: 0.6 }}
             className="rounded-2xl border border-white/[0.08] overflow-hidden shadow-2xl shadow-blue-500/5"
           >
-            <EconomicWorldMap
+            <PhaserGameWorld
               allocation={EMPTY_ALLOCATION}
               onAllocationChange={() => {}}
               players={{}}

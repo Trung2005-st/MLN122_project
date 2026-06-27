@@ -86,7 +86,9 @@ export function avatarPosition(
   alloc: Record<AllocationBucket, number> | undefined,
   fallback: AllocationBucket = "lend"
 ): { x: number; y: number } {
-  if (!alloc) return HUB;
+  if (!alloc) return { x: HUB.x, y: HUB.y };
+  const total = (Object.values(alloc) as number[]).reduce((a, b) => a + b, 0);
+  if (total === 0) return { x: HUB.x, y: HUB.y };
   const zone = dominantZone(alloc);
   const z = getZone(zone);
   const amount = alloc[zone] / 100;

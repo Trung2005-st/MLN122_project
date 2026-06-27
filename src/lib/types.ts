@@ -108,10 +108,10 @@ export interface LeaderboardEntry {
 }
 
 export const EMPTY_ALLOCATION: Allocation = {
-  lend: 25,
-  borrow: 25,
-  land: 25,
-  fictitious: 25,
+  lend: 0,
+  borrow: 0,
+  land: 0,
+  fictitious: 0,
 };
 
 export const BUCKET_LABELS: Record<
